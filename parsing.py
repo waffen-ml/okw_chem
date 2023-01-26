@@ -1,10 +1,7 @@
-from periodic_table import *
 from residues import *
-from simple import Simple
-from salt import Salt
-from hydroxide import Hydroxide
-from acid import Acid
-from oxide import Oxide
+from elements import *
+from classes import *
+from core import *
 
 
 PARSE_RESIDUES = [
@@ -83,7 +80,7 @@ def rec(s, req):
         raise Exception('Invalid expression')
     
     coef, lbl = extract_minor_coef(curr)
-    el = T[lbl]
+    el = Element(lbl)
     
     if not rem and req == 0:
         if coef == (1 + el.is_paired_simple):
@@ -127,7 +124,7 @@ def classify_compound(comp):
 
 def parse(s):
     coef, s = extract_major_coef(s)
-    result = rec(s)
+    result = rec(s, 0)
 
     if type(result) != Simple:
         result = classify_compound(result)

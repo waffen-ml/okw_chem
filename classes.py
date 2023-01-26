@@ -1,24 +1,29 @@
 from toolkit import *
 from core import Compound
 from elements import *
-from balance import bin_balance
 from data import *
+
+
+def get_base_ctype(base):
+    if base.label == 'NH4':
+        return CT.BASIC
+    return base.ctype
 
 
 class Oxide(Compound):
     def config(self, unit):
-        self.type = unit.actype
+        self.type = get_base_ctype(unit)
         return bin_balance(unit, O(-2))
 
 
 class Hydroxide(Compound):
-    HGR = Compound(O(-2), H(1))
+    RESIDUE = Compound(O(-2), H(1))
 
-    def config(self, metal):
-        residue = Hydroxide.HGR * metal.charge
-        self.type = metal.actype
-        self.is_soluble = is_soluble(metal, residue)
-        return [metal, residue]
+    def config(self, base):
+        residue = Hydroxide.RESIDUE * base.charge
+        self.type = get_base_ctype(base)
+        self.is_soluble = solubility.check(base, residue)
+        return [base, residue]
     
     def _dissolve_cond(self):
         return self.is_soluble
@@ -28,7 +33,7 @@ class Salt(Compound):
     def config(self, *args):
         base_metal = args[0]
         residue = Compound(args[1:])
-        self.is_soluble = is_soluble(base_metal, residue)
+        self.is_soluble = solubility.check(base_metal, residue)
         return bin_balance(base_metal, residue)
 
     def _dissolve_cond(self):
@@ -68,3 +73,7 @@ class Simple(Compound):
 
     def simplify_(self):
         pass
+
+    @property
+    def is_metal(self):
+        return self.base.is_metal

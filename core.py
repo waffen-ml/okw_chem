@@ -1,6 +1,6 @@
 from toolkit import *
 from copy import copy
-from data import get_element_attr
+from data import *
 
 
 class ChemUnit:
@@ -9,6 +9,9 @@ class ChemUnit:
     coef = 1
 
     def __eq__(self, other):
+        return self.label == other.label
+
+    def equals(self, other):
         return other.coef == self.coef \
             and other.charge == self.charge \
             and self.label == other.label
@@ -32,17 +35,22 @@ class ChemUnit:
 
     def to_str(self, full=False, free=True):
         coef_part = optimized_int(self.coef)
-        if not free:
-            el_count = count_uppercase(self.label)
-            main_lbl = f'({self.label})' if el_count > 1 \
-                and self.coef > 1 else self.label
-            label = main_lbl + coef_part
+        main_part = self._wrap(free)
+        if free:
+            label = coef_part + main_part
         else:
-            label = coef_part + self.label
+            label = main_part + coef_part
         if full:
             label += make_charge_lbl(self.charge)
         return label
 
+    def _wrap(self, is_free):
+        if is_free:
+            return self.label
+        el_count = count_upper(self.label)
+        return f'({self.label})' if el_count > 1 \
+            and self.coef > 1 else self.label
+    
     def __repr__(self):
         return self.to_str(full=True)
     
@@ -73,6 +81,12 @@ class ChemUnit:
     def get_full_charge(self):
         return self.coef * self.charge
 
+    def __getstate__(self):
+        return self.__dict__
+    
+    def __setstate__(self, d):
+        self.__dict__ = d.copy()
+
 
 class Element(ChemUnit):
     def __init__(self, label):
@@ -88,11 +102,32 @@ class Element(ChemUnit):
             c.set_coef(coef)
         return c
 
+    def calc_particles(self):
+        protons = self.number
+        electrons = self.number - self.charge
+        neutrons = round(self.atomic_mass) - protons
+        return protons, electrons, neutrons
+
     def identity(self):
         return self(self.default_charge, 1)
 
+    def describe(self):
+        p, e, n = self.calc_particles()
+        return '\n'.join([
+            f'Элемент {self(coef=1).to_str(True)} ({self.name}), ' +
+            f'{"металл" if self.is_metal else "неметалл"};',
+            f'ПН: {self.number}, {self.pos_period} период, ' +
+            f'{group_to_rome_num(self.pos_group)} группа, {["побочная", "главная"][self.pos_sub]} подгруппа;',
+            f'Состав атома: {p} протонов, {e} электронов, {n} нейтронов;',
+            f'Степени окисления: {", ".join(map(append_sign, self.possible_charges))};',
+            f'Атомная масса: {self.atomic_mass:.2f};',
+            f'Электроотрицательность: {self.electroneg:.2f}.'
+        ])
+
     def __getattr__(self, name):
-        return get_element_attr(self, name)
+        if name == 'ctype':
+            return comp_activity.get_type(self)
+        return element_table(self.label, name)
 
 
 class Compound(ChemUnit):
@@ -104,23 +139,25 @@ class Compound(ChemUnit):
         input_units = self.config(*args, **kwargs)
         self.units = []
         self.charge = 0
+
         for u in input_units:
             u = u()
             self.units.append(u)
             self.charge += u.get_full_charge()
-        if not kwargs.get('no_simplify'):
-            self.simplify_()
-        self.flatten_()
+
+        self._optim_coef()
         self._make_label()
 
     def _make_label(self):
         self.label = ''
         for u in self.units:
             self.label += u.to_str(free=False)
-        
+    
+    @property
     def base(self):
         return self[0]
     
+    @property
     def residue(self):
         return self[1:]
 
@@ -145,10 +182,7 @@ class Compound(ChemUnit):
                 el += [u]
         return el
 
-    def simplify(self):
-        return apply_to_copy(self, Compound.simplify_)
-
-    def simplify_(self):
+    def _optim_coef(self):
         g = gcd(*[
             u.coef for u in self.units
         ])
@@ -157,19 +191,17 @@ class Compound(ChemUnit):
             for u in self.units]
         self.mul_coef_(g)
 
-    def flatten_(self):
+    def _flatten(self):
         new_units = []
         for u in self.units:
-            if type(u) == Element:
+            if type(u) == Element or u.coef != 1:
                 new_units.append(u)
-            elif u.coef != 1:
-                new_units.append(u.flatten())
             else:
-                new_units += u.flatten().units
+                new_units += u.squeeze()
         self.units = new_units
 
-    def flatten(self):
-        return apply_to_copy(self, Compound.flatten_)
+    def squeeze(self):
+        return self.units
 
     def _dissolve_cond(self):
         return False
@@ -177,7 +209,7 @@ class Compound(ChemUnit):
     def _true_dissolve(self):
         return [
             Ion(u) * self.coef
-            for u in self.units
+            for u in (self.base, self.residue)
         ]
 
     def dissolve(self):
@@ -191,4 +223,17 @@ class Ion(ChemUnit):
         self.coef = obj.coef
         self.obj = obj.identity()
         self.label = obj.label
+        self.charge = self.obj.charge
+
+    def __str__(self):
+        return self.to_str(True)
+
+
+class Complex(Compound):
+    def squeeze(self):
+        return [self]
+    
+    def _wrap(self, _):
+        return f'[{self.label}]'
+
 

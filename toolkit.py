@@ -1,9 +1,5 @@
-import pandas as pd
 from copy import copy
 import math
-
-
-soulbility_table = pd.read_csv('sbtable.csv', index_col=0)
 
 
 def are_all_soluble(units):
@@ -27,20 +23,14 @@ def gcd(*args):
     return g
 
 
-def lcm(a, b):
-    return a * b // gcd(a, b)
+def lcm(*values):
+    r = 1
+    for v in values:
+        r *= v // gcd(v, r)
+    return r
 
 
-def dessolve_objects(arr: list) -> list:
-    '''Выполняет диссоциацию объектов списка'''
-    result = []
-    for obj in arr:
-        result += obj.dessolve()
-    return result
-
-
-def int_to_charge(n: int) -> str:
-    '''Преобразует число в отформатированную строку с зарядом'''
+def int_to_charge(n):
     if n == 0:
         return '0'
     n_sign = '-' if n < 0 else '+'
@@ -50,57 +40,27 @@ def int_to_charge(n: int) -> str:
     return f'{n_abs}{n_sign}'
 
 
-def make_charge_lbl(n: int):
+def make_charge_lbl(n):
     return f'({int_to_charge(n)})'
 
 
-def create_coef(main_el1, main_el2) -> tuple:
-    fch1 = main_el1.get_full_charge()
-    fch2 = main_el2.get_full_charge()
-    k = lcm(fch1, fch2)
-    c1 = k // fch1
-    c2 = k // fch2
-    return c1, c2
-
-
-def count_uppercase(s: str) -> int:
-    '''Подсчитывает количество символов в верхнем регистре'''
-    return sum([1 for ch in s if ch.isupper()])
-
-
-def check_compound(comp):
-    '''Проверяет объект Compound на корректность'''
-    if comp.oxidstate != 0 or len(comp.elements) != 2:
-        raise BadCompoundException
-
-
-def index_balance(oxidstate1: int, oxidstate2: int) -> (int, int):
-    '''Уравнивает индексы для 2-х объектов'''
-    idx1 = abs(oxidstate2)
-    idx2 = oxidstate1
-    g = gcd(idx1, idx2)
-    return idx1 // g, idx2 // g
-
-
-def optimized_int(n: int) -> str:
-    '''Преобразует число в оптимизированную для формул строку'''
+def optimized_int(n):
     if n > 1:
         return str(n)
     return ''
 
 
-def group_to_str(s: str, times: int) -> str:
-    if times == 1:
-        return s
-    else:
-        return f'({s}){times}'
+def append_sign(coef):
+    if coef <= 0:
+        return str(coef)
+    return f'+{coef}'
 
 
-def obj_to_str(obj, full=False) -> str:
-    '''Преобразует объект в удобночитаеую строку'''
-    if obj.oxidstate == 0 and not full:
-        return obj.label
-    return f'{obj.label}({int_to_oxidstate(obj.oxidstate)})'
+def group_to_rome_num(gr):
+    if gr <= 3:
+        return 'I' * gr
+    a = 5 - gr
+    return 'I' * max(0, a) + 'V' + 'I' * max(0, -a)
 
 
 def flatten(obj):
@@ -110,4 +70,77 @@ def flatten(obj):
     for o in obj:
         other += flatten(o)
     return other
+
+
+def underlined(s):
+    return s + '\n' + '-' * len(s) * 2
+
+
+def bin_balance(u1, u2):
+    idx1 = abs(u1.charge)
+    idx2 = abs(u2.charge)
+    g = gcd(idx1, idx2)
+    return u1(coef=idx2 // g), u2(coef=idx1 // g)
+
+
+def cut_first_unit(s):
+    opened = 0
+    for i, ch in enumerate(s):
+        if (ch.isupper() or ch == '(') and not opened and i:
+            return s[:i], s[i:]
+        if ch == '(':
+            opened += 1
+        elif ch == ')':
+            opened -= 1
+    else:
+        return s, ''
+
+
+def cut_first_units(s, n):
+    cut = ''
+    for i in range(n):
+        unit, s = cut_first_unit(s)
+        cut += unit
+    return cut, s
+
+
+def coef_to_int(coef):
+    return 1 if not coef else int(coef)    
+
+
+def count_upper(s):
+    return sum(ch.isupper() for ch in s)
+
+
+def extract_major_coef(s, str_coef=False):
+    coef = ''
+    for ch in s:
+        if ch.isnumeric():
+            coef += ch
+        else:
+            break
     
+    remain = s[len(coef):]
+    
+    if str_coef:
+        return coef, remain
+    else:
+        return coef_to_int(coef), remain
+
+
+def extract_minor_coef(s_orig):
+    coef, s = extract_major_coef(s_orig[::-1], str_coef=True)
+    s, coef = s[::-1], coef[::-1]
+    coef = coef_to_int(coef)
+
+    if s[0] + s[-1] != '()' and count_upper(s) > 1:
+        return 1, s_orig
+    else:
+        proc_s = s.lstrip('(').rstrip(')')
+        return coef, proc_s
+
+
+def wrap(obj):
+    if type(obj) in [list, tuple]:
+        return obj
+    return [obj]
