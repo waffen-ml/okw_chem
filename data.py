@@ -83,8 +83,40 @@ class CompActivity:
                 return CompActivity.TYPES.ACIDIC
 
 
+class AcidInfo:
+    STRENGTH_ROW = ['H2SiO3', 'H2S', 'H2CO3', 'HNO2', 'HF', 'H3PO4',
+        'H2SO3', 'HMnO4', 'HNO3', 'H2SO4', 'HCl', 'HBr', 'HClO4', 'HI']
+    STRONG_FROM = 'HMnO4'
+    NSTABLE_ACIDS = ['H2CO3', 'H2SiO3']
+    VOL_ROW = ['HCl', 'H2S', 'HNO3', 'HClO4']
+
+
+    def is_strong(self, acid):
+        s2 = self._get_strength_label(self.STRONG_FROM)
+        return acid.strength >= s2
+
+    def is_stable(self, acid):
+        return acid.label in self.NSTABLE_ACIDS
+
+    def scale(self, arr, el):
+        return (arr.index(el) + 1) / len(arr)
+
+    def _get_strength_label(self, lbl):
+        return self.scale(self.STRENGTH_ROW, lbl)
+
+    def get_strength(self, acid):
+        return self._get_strength_label(acid.label)
+
+    def _get_vol_label(self, lbl):
+        return int(lbl in self.VOL_ROW)
+
+    def get_vol(self, acid):
+        return self._get_vol_label(acid.label)
+
+
 element_table = ElementTable()
 activity_row = ActivityRow()
 solubility = Solubility()
 comp_activity = CompActivity()
 CT = comp_activity.TYPES
+acidinfo = AcidInfo()

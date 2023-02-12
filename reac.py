@@ -6,6 +6,7 @@ from data import *
 from itertools import permutations
 from types import FunctionType
 from common import *
+from acids import *
 
 
 class Tag:
@@ -442,6 +443,44 @@ class AmmoniumReac:
         pass
 
 
+class AcidicSaltReac:
+    @Reaction(AcidicSalt, Simple, lambda x, y: y.is_metal and y not in [Li, Na, K, Ba])
+    def acidic_salt_metal(salt, metal):
+        new_res = salt.residue.residue
+        return make_result(Salt(metal, new_res),
+            Salt(salt.base, new_res), Simple(H))
+        
+    @Reaction(AcidicSalt, Acid)
+    def acidic_salt_acid(salt, acid):
+        new_res = salt.residue.residue
+        new_acid = Acid(new_res)
+
+        if new_acid.is_more_vol_than(acid) or acid.is_stronger_than(new_acid):
+            return make_result(new_acid, Salt(salt.base, acid.residue))
+    
+    @Reaction(AcidicSalt, Hydroxide, lambda _, y: y.is_soluble)
+    def acidic_salt_hydroxide(salt, hydr):
+        new_res = salt.residue.residue
+        return make_result(H2O, Salt(salt.base, new_res),
+            Salt(hydr.base, new_res))
+        
+    @Reaction(AcidicSalt, Oxide, lambda _, y: y.type == CT.BASIC)
+    def acidic_salt_oxide(salt, oxide):
+        new_res = salt.residue.residue
+        return make_result(H2O, Salt(salt.metal, new_res),
+            Salt(oxide.metal, new_res))
+
+    @Reaction(AcidicSalt, PlainSalt, lambda x, y: y.is_soluble)
+    def acidic_salt_plain_salt(asalt, psalt):
+        new_res = asalt.residue.residue
+        acid = Acid(psalt.residue)
+        s1 = Salt(asalt.base, new_res)
+        s2 = Salt(psalt.base, new_res)
+        if not are_all_soluble(s1, s2) or not acid.is_stable():
+            return make_result(s1, s2, acid)
+
+
+
 RT = ReacEnum(
     BIDIRECT = 'Реакция обратима',
     EXOTERM = 'Реакция экзотермична',
@@ -450,4 +489,4 @@ RT = ReacEnum(
     NEED_CATALYST = lambda x: f'Необходим катализатор: {x}'
 )
 
-rcore = ReactCore(MainReactions(), AmmoniumReac())
+rcore = ReactCore(MainReactions(), AmmoniumReac(), AcidicSaltReac())

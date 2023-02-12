@@ -1,7 +1,8 @@
 from toolkit import *
-from core import Compound
+from core import *
 from elements import *
 from data import *
+from common import *
 
 
 def get_base_ctype(base):
@@ -29,40 +30,25 @@ class Hydroxide(Compound):
         return self.is_soluble
 
 
-class Salt(Compound):
-    def config(self, *args):
-        base_metal = args[0]
-        residue = Compound(args[1:])
-        self.is_soluble = solubility.check(base_metal, residue)
-        return bin_balance(base_metal, residue)
-
-    def _dissolve_cond(self):
-        return self.is_soluble
-
-
 class Acid(Compound):
-    CLASSIFICATION = {
-        0: ['F', 'NO2', '2S', 'CO3', 'SiO3'],
-        1: ['SO3', 'PO4'],
-        2: ['Cl', 'Br', 'I', 'SO4', 'NO3']
-    }
-
-    @staticmethod
-    def get_acid_strength(label):
-        for strength, arr in Acid.CLASSIFICATION.items():
-            if label in arr:
-                return strength
-        return 0
-
     def config(self, *args):
         residue = Compound(*args)
         if residue.charge >= 0:
             raise Exception()
-        self.strength = Acid.get_acid_strength(residue.label)
-        return [H(1) * -residue.charge, residue]
+        return self.complect(H(1), residue)
+
+    def _post_init(self):
+        self.strength = acidinfo.get_strength(self)
+        self.vol = acidinfo.get_vol(self)
 
     def _dissolve_cond(self):
-        return self.strength == 2
+        return acidinfo.is_strong(self)
+
+    def is_stronger_than(self, other):
+        return self.strength > other.strength
+
+    def is_more_vol_than(self, other):
+        return self.vol > other.vol
 
 
 class Simple(Compound):
@@ -77,3 +63,29 @@ class Simple(Compound):
     @property
     def is_metal(self):
         return self.base.is_metal
+
+
+class Salt(Compound):
+    def config(self, base, res):
+        return bin_balance(base, res)
+
+    def _post_init(self):
+        self.is_soluble = solubility.check(
+            self.base, self.residue)
+
+    def _dissolve_cond(self):
+        return self.is_soluble
+
+
+class AcidicSalt(Salt):
+    pass
+
+
+class HydroSalt(Salt):
+    def _post_init(self):
+        pass
+
+    def _dissolve_cond(self):
+        return True
+
+

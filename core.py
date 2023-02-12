@@ -3,6 +3,16 @@ from copy import copy
 from data import *
 
 
+def optimzie_input_units(units):
+    proc = []
+    for arg in units:
+        if not is_iterable(arg):
+            proc.append(arg)
+            continue
+        proc.append(Compound(*arg) if len(arg) else arg[0])
+    return proc
+
+
 class ChemUnit:
     label = 'X'
     charge = 0
@@ -78,7 +88,7 @@ class ChemUnit:
     def __imul__(self, k):
         self.mul_coef_(k)
 
-    def get_full_charge(self):
+    def full_charge(self):
         return self.coef * self.charge
 
     def __getstate__(self):
@@ -109,6 +119,9 @@ class Element(ChemUnit):
         return protons, electrons, neutrons
 
     def identity(self):
+        return self(coef=1)
+
+    def original(self):
         return self(self.default_charge, 1)
 
     def describe(self):
@@ -131,35 +144,32 @@ class Element(ChemUnit):
 
 
 class Compound(ChemUnit):
-    def config(self, *args, **kwargs):
+    def config(self, *args):
         return args
 
-    def __init__(self, *args, **kwargs):
-        args = flatten(args)
-        input_units = self.config(*args, **kwargs)
+    def __init__(self, *args):
+        input_units = optimzie_input_units(args)
+        conf_units = self.config(*input_units)
+
         self.units = []
         self.charge = 0
 
-        for u in input_units:
+        for u in conf_units:
             u = u()
             self.units.append(u)
-            self.charge += u.get_full_charge()
-
+            self.charge += u.full_charge()
+        
         self._optim_coef()
         self._make_label()
+        self._post_init()
+
+    def _post_init(self):
+        pass
 
     def _make_label(self):
         self.label = ''
         for u in self.units:
             self.label += u.to_str(free=False)
-    
-    @property
-    def base(self):
-        return self[0]
-    
-    @property
-    def residue(self):
-        return self[1:]
 
     def __getitem__(self, val):
         if type(val) == int:
@@ -216,6 +226,14 @@ class Compound(ChemUnit):
         if self._dissolve_cond():
             return self._true_dissolve()
         return [Ion(self)]
+    
+    @property
+    def base(self):
+        return self[0]
+    
+    @property
+    def residue(self):
+        return self[1:]
 
 
 class Ion(ChemUnit):

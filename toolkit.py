@@ -2,7 +2,7 @@ from copy import copy
 import math
 
 
-def are_all_soluble(units):
+def are_all_soluble(*units):
     return all(u.is_soluble for u in units)
 
 
@@ -83,10 +83,18 @@ def bin_balance(u1, u2):
     return u1(coef=idx2 // g), u2(coef=idx1 // g)
 
 
-def cut_first_unit(s):
+def coef_to_int(coef):
+    return 1 if not coef else int(coef)    
+
+
+def count_upper(s):
+    return sum(ch.isupper() for ch in s)
+
+
+def cut_at_begin(s, f):
     opened = 0
     for i, ch in enumerate(s):
-        if (ch.isupper() or ch == '(') and not opened and i:
+        if f(ch, i, opened):
             return s[:i], s[i:]
         if ch == '(':
             opened += 1
@@ -96,30 +104,35 @@ def cut_first_unit(s):
         return s, ''
 
 
-def cut_first_units(s, n):
-    cut = ''
-    for i in range(n):
-        unit, s = cut_first_unit(s)
-        cut += unit
-    return cut, s
+def cut_first_unit(s):
+    f = lambda ch, i, o: (ch.isupper() or ch == '(') and not o and i
+    return cut_at_begin(s, f)
 
 
-def coef_to_int(coef):
-    return 1 if not coef else int(coef)    
+def cut_mult_at_begin(s, i, f):
+    units = []
+    while i > 0 and s:
+        u, s = f(s)
+        units.append(u)
+        i -= 1
+    return units, s
 
 
-def count_upper(s):
-    return sum(ch.isupper() for ch in s)
+def cut_first_units(s, i):
+    return cut_mult_at_begin(s, i, cut_first_unit)
 
 
 def extract_major_coef(s, str_coef=False):
     coef = ''
     for ch in s:
-        if ch.isnumeric():
-            coef += ch
-        else:
+        if ch in '()' or ch.isupper():
+            end = ch
             break
+        coef += ch
     
+    if coef and end.isupper() and not coef[-1].isdigit():
+        coef = coef[:-1]
+
     remain = s[len(coef):]
     
     if str_coef:
@@ -128,19 +141,39 @@ def extract_major_coef(s, str_coef=False):
         return coef_to_int(coef), remain
 
 
-def extract_minor_coef(s_orig):
+def _minor_coef_functional(s_orig, str_coef=False):
     coef, s = extract_major_coef(s_orig[::-1], str_coef=True)
     s, coef = s[::-1], coef[::-1]
-    coef = coef_to_int(coef)
+    coef = coef if str_coef else coef_to_int(coef)
 
-    if s[0] + s[-1] != '()' and count_upper(s) > 1:
-        return 1, s_orig
-    else:
-        proc_s = s.lstrip('(').rstrip(')')
-        return coef, proc_s
+    if s[0] + s[-1] == '()':
+        s = s[1:-1]
 
+    return coef, s
+
+
+def extract_minor_coef(s, str_coef=False):
+    iden = '' if str_coef else 1
+    _, r = cut_first_unit(s)
+    if r:
+        return iden, s
+    return _minor_coef_functional(s, str_coef)
+
+
+def apply_coef(lbl, coef):
+    if coef == 1:
+        return lbl
+    c = optimized_int(coef)
+    if count_upper(lbl) > 1:
+        lbl = f'({lbl})'
+    return lbl + c
+    
 
 def wrap(obj):
     if type(obj) in [list, tuple]:
         return obj
     return [obj]
+
+
+def is_iterable(obj):
+    return type(obj) in [tuple, list]
