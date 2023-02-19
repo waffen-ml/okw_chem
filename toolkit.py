@@ -123,14 +123,14 @@ def cut_first_units(s, i):
 
 
 def extract_major_coef(s, str_coef=False):
-    coef = ''
+    coef = end = ''
     for ch in s:
         if ch in '()' or ch.isupper():
             end = ch
             break
         coef += ch
     
-    if coef and end.isupper() and not coef[-1].isdigit():
+    if end.isupper() and coef and not coef[-1].isdigit():
         coef = coef[:-1]
 
     remain = s[len(coef):]
@@ -177,3 +177,14 @@ def wrap(obj):
 
 def is_iterable(obj):
     return type(obj) in [tuple, list]
+
+
+def combine_units(units):
+    d = {}
+    for e in units:
+        lbl = e.identity().to_str(True)
+        if lbl in d:
+            d[lbl] = d[lbl].incr(e.coef)
+            continue
+        d[lbl] = e
+    return list(d.values())

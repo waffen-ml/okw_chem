@@ -1,118 +1,334 @@
-from elements import *
-from core import *
-from residues import *
+import re
 from toolkit import *
+from common import *
+from core import *
+from elements import *
 from classes import *
 
 
-class ChemVision:
-    def __init__(self):
-        self.setup_bases()
-        self.setup_exceptions()
-        self.setup_residues()
+def cut_first_part(s):
+    if s.startswith('('):
+        f = lambda ch, i, o: not o and i and (ch.isupper() or ch == '(')
+    else: f = lambda ch, i, o: ch == '('
+    return cut_at_begin(s, f)
 
-    def setup_residues(self):
-        self.residues = [
-            Br(-1), CO3, Cl(-1), F(-1),
-            I(-1), NO3, NO2, OH, PO4, S(-2), SO3,
-            SO4, O(-2), SiO3
-        ]
 
-    def setup_bases(self):
-        self.bases = [
-            el for el in all_elements
-            if any(pc > 0 for pc in el.possible_charges)
-        ] + [NH4]
+def extract_parts(s):
+    parts = []
+    while s:
+        f, s = cut_first_part(s)
+        parts.append(f)
+    return parts
 
-    def setup_exceptions(self):
-        self.exceptions = [
-            Compound(N(-3), 3 * H(1))
-        ]
 
-    def _get_unit(self, arr, label):
-        for a in arr:
-            if a.label == label:
-                return a
+def set_analyze(s):
+    if len(s) != 4 or s[0] + s[2] != '*=':
         return None
+    return s[1] + ';' + s[3]
 
-    def get_exception(self, label):
-        return self._get_unit(self.exceptions, label)
 
-    def get_residue(self, label):
-        return self._get_unit(self.residues, label)
+def create_filter(pattern, db):
+    pattern = pattern.replace(' ', '')
+    coef, main = extract_minor_coef(pattern, str_coef=True)
+    set_a = set_analyze(main)
 
-    def get_base(self, label):
-        return self._get_unit(self.bases, label)
+    if set_a is not None:
+        return SetFilter(coef, set_a, db)
 
-    def _cut_base(self, s):
-        to_return = None
-        i = 1
-        while True:
-            new_base, rem = cut_first_units(s, i)
-            _, base_s = extract_minor_coef(new_base)
-            if self.get_base(base_s) is not None:
-                to_return = (new_base, rem)
-            if not rem:
-                break
-            i += 1
-        return to_return
+    elif '(' not in main:
+        return PlainFilter(coef, main)
 
-    def parse(self, s, charge=0):
-        coef, s = extract_major_coef(s)
-        
-        if (excep := self.get_exception(s)) is not None:
-            return excep * coef
+    return ComplexFilter(coef, main, db)
 
-        result = self._parse_rec(s, charge)
 
-        #if charge != 0 and type(result) != Simple:
-        #    result = self.classify_compound(result)
-        
-        return coef * result
+def pass_through(parallels, filter_):
+    new_parall = []
+    for p in parallels:
+        new_parall += filter_.check(
+            p.p, p.args)
+    return new_parall
 
-    def _parse_rec(self, s, req):
-        # s -> without coef!!!
-        if (res := self.get_residue(s)) is not None:
-            if res.charge == req:
-                return res
-        
-        curr, res = self._cut_base(s)
-        coef, lbl = extract_minor_coef(curr)
-        base = self.get_base(lbl)
 
-        if not res and req == 0 and type(base) == Element:
-            if coef == (1 + base.is_paired_simple):
-                return coef * Simple(base)
-            return None
-        
-        elif not res and req != 0:
-            if req == base.charge:
-                return coef * base
-            elif type(base) == Element and req in base.possible_charges:
-                return coef * base(req)
-            return None
-            
-        rem_coef, rem_lbl = extract_minor_coef(res)
+class Enum:
+    def __init__(self, d):
+        self.d = d
+    
+    def __getattr__(self, v):
+        return self[v]
+    
+    def __getitem__(self, v):
+        return self.d[v]
 
-        if type(base) == Element:
-            configs = [base(pch) for pch in base.possible_charges
-                if pch > 0]
+    def __repr__(self):
+        return f'Enum({self.d})'
+
+
+class Parallel:
+    def __init__(self, p, args):
+        self.args = args.copy()
+        self.p = p
+
+    def __repr__(self):
+        return f'Parallel("{self.p}", {self.args})'
+
+
+class Filter:
+    def __init__(self, coef, *args):
+        if coef and not coef.isnumeric():
+            self.coef = None
+            self.cvname = coef
         else:
-            configs = [base]
+            self.coef = coef_to_int(coef)
+        self.config(*args)
 
-        for conf in configs:
-            new_req = req - conf.charge * coef
-            response = self._parse_rec(rem_lbl, new_req / rem_coef)
-            if response is None:
+    def _coef_node(self, c):
+        cb = self.coef is None or c == self.coef
+        addit = {self.cvname: c} if self.coef is None else {}
+        return cb, addit
+
+    def _cuts_node(self, p):
+        sets = []
+        w = ''
+        while p:
+            w_, p = cut_first_unit(p)
+            w += w_
+            c, z = extract_minor_coef(w)
+            sets.append((z, c, p))
+        return sets
+
+    def config(self):
+        pass
+    
+
+class PlainFilter(Filter):
+    def config(self, main):
+        self.main = main
+    
+    def check(self, p, args):
+        for z, c, p in self._cuts_node(p):
+            cb, addit = self._coef_node(c)
+            
+            if not cb or z != self.main:
                 continue
-            return Compound(coef * conf, rem_coef * response)
+            
+            return [Parallel(p, args | addit)]
+        return []
+
+
+class SetFilter(Filter):
+    def config(self, p, db):
+        self.main, self.uvname = p.split(';')
+        self.db = db
+
+    def search(self, m):
+        return self.db.get(self.main, m)
+
+    def check(self, p, args):
+        result = []
+        for z, c, p in self._cuts_node(p):
+            cb, addit = self._coef_node(c)
+            
+            if not cb:
+                continue
+
+            unit = self.search(z)
+
+            if unit is None:
+                continue
+            
+            new_args = args | {
+                self.uvname: unit
+            } | addit
+            result.append(Parallel(p, new_args))
+        
+        return result
+
+
+class ComplexFilter(Filter):
+    def config(self, main, db):
+        parts = extract_parts(main)
+        self.units = [create_filter(p, db) for p in parts]
+    
+    def check(self, p, args):
+        result = []
+        for z, c, p in self._cuts_node(p):
+            cb, addit = self._coef_node(c)
+            if not cb:
+                continue
+            q = [Parallel(z, args | addit)]
+            for u in self.units:
+                q = pass_through(q, u)
+            for qi in q:
+                if qi.p:
+                    continue
+                qi.p = p
+                result.append(qi)
+        return result
+        
+
+class Database:
+    def __init__(self, data):
+        self.data = data
+
+    def search(self, lbl, arr):
+        for unit in arr:
+            if lbl == unit.label:
+                return unit
         return None
 
-    def regroup(self, comp):
-        t = type(comp)
-        coef, comp_s = extract_major_coef(str(comp))
-        result = self._parse_rec(comp_s, comp.charge)
-        return t(*result.units) * coef
+    def get(self, path, lbl):
+        return self.search(lbl, self.data[path])
+
+    def __getitem__(self, v):
+        return self.data[v]
+
+    def __setitem__(self, n, v):
+        self.data[n] = v
 
 
-vision = ChemVision()
+class Vision:
+    def __init__(self, db, *engines):
+        self.units = []
+        self.db = db
+        for e in engines:
+            local = [
+                obj for a in dir(e)
+                if type(obj := getattr(e, a)) \
+                  == parseunit
+            ]
+            self.units += local
+        for u in self.units:
+            u.cfg_filter(db)
+
+    def register_excep(self, excep):
+        self.excep = excep
+
+    def parse_excep(self, expr):
+        for u in self.excep:
+            if u.label == expr:
+                return u
+        return None
+
+    def parse(self, expr):
+        coef, main = extract_major_coef(expr)
+
+        u = self.parse_excep(main)
+        if u is not None:
+            return coef * u
+
+        for un in self.units:
+            try:
+                cb = un(main)
+                assert cb is not None
+            except:
+                continue
+            return coef * cb
+
+        return None
+        
+
+class parseunit:
+    def __init__(self, expr):
+        self.expr = expr
+
+    def cfg_filter(self, db):
+        self.filter = create_filter(self.expr, db)
+
+    def past_init(self, func):
+        self.func = func
+        return self
+    
+    def __call__(self, inp):
+        p = self.filter.check(inp, {})
+        p = [q for q in p if not q.p]
+        if not p:
+            return None
+        enum = Enum(p[0].args)
+        return self.func(enum)
+
+
+def ParseUnit(expr):
+    pu = parseunit(expr)
+    return pu.past_init
+
+
+def config(units, charge=0):
+    if not units:
+        return None if charge else []
+    unit, units = units[0], units[1:]
+    options = [unit] if type(unit) != Element else [
+               unit(pch) for pch in unit.possible_charges
+               if pch != 0]
+    for op in options:
+        cb = config(units, charge - op.full_charge())
+        if cb is None:
+            continue
+        return [op] + cb
+    return None
+
+
+def b_single(unit, count, charge):
+    unit, = config([unit * count], -charge)
+    return unit
+
+
+db = Database({
+    'r': [Br(-1), CO3, Cl(-1), F(-1),
+        I(-1), NO3, NO2, PO4, S(-2), SO3,
+        SO4, SiO3, Cr2O7, MnO4, ClO3],
+    'a': [el for el in all_elements]
+})
+
+db['b'] = db['a'] + [NH4]
+
+
+class ParseEngine:
+    @ParseUnit('(*b=a)n(*r=b)m')
+    def plain_salt(w):
+        main = b_single(w.a, w.n, w.m * w.b.charge)
+        return Salt(main, w.b)
+
+    @ParseUnit('(*b=a)(OH)n')
+    def hydroxide(w):
+        main = b_single(w.a, 1, -w.n)
+        return Hydroxide(main)
+
+    @ParseUnit('(*b=a)n(O)m')
+    def oxide(w):
+        main = b_single(w.a, w.n, -2 * w.m)
+        return Oxide(main)
+
+    @ParseUnit('(H)n(*r=a)m')
+    def acid(w):
+        return Acid(w.a)
+
+    @ParseUnit('(*a=i)k')
+    def simple(w):
+        return Simple(w.i)
+    
+    @ParseUnit('((*b=a)(OH)n)m(*r=q)k')
+    def hydro_salt(w):
+        ch = -w.n * w.m + w.q.charge * w.k
+        main = b_single(w.m, w.a, ch)
+        return HydroSalt(
+            (main.identity() & OH * w.n) * w.m,
+            w.q * w.k
+        )
+
+    @ParseUnit('(*b=a)n((H)k(*r=b)p)m')
+    def acidic_salt(w):
+        res = H(1) * w.k & w.b * w.p
+        main = b_single(w.a, w.n, res.charge * w.m)
+        return AcidicSalt(main, res)
+
+
+vision = Vision(db, ParseEngine())
+vision.register_excep([
+    N(-3) & H(1) * 3, H2O,
+    Si(-4) & 4 * H(1)
+])
+
+
+def parse(c):
+    return vision.parse(c)
+

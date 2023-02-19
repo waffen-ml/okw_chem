@@ -13,6 +13,20 @@ def optimzie_input_units(units):
     return proc
 
 
+def combine(x, y):
+    units = []
+
+    for v in x, y:
+        if type(v) == Element:
+            units.append(v)
+        elif issubclass(type(v), Compound):
+            units.append(v)
+        else:
+            raise Exception('Invalid combine')
+    
+    return Compound(*units)
+
+
 class ChemUnit:
     label = 'X'
     charge = 0
@@ -97,6 +111,9 @@ class ChemUnit:
     def __setstate__(self, d):
         self.__dict__ = d.copy()
 
+    def __and__(self, w):
+        return combine(self, w)
+
 
 class Element(ChemUnit):
     def __init__(self, label):
@@ -121,7 +138,8 @@ class Element(ChemUnit):
     def identity(self):
         return self(coef=1)
 
-    def original(self):
+    @property
+    def orig(self):
         return self(self.default_charge, 1)
 
     def describe(self):
@@ -175,7 +193,10 @@ class Compound(ChemUnit):
         if type(val) == int:
             return self.units[val]
         elif type(val) == slice:
-            return Compound(*self.units[val])
+            arr = self.units[val]
+            if len(arr) == 1:
+                return arr[0]
+            return Compound(*arr)
         else:
             raise Exception('Incorrect selector')
 
@@ -190,7 +211,7 @@ class Compound(ChemUnit):
                 el += [k * u.coef for k in m]
             else:
                 el += [u]
-        return el
+        return combine_units(el)
 
     def _optim_coef(self):
         g = gcd(*[

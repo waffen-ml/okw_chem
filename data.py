@@ -23,16 +23,18 @@ class ElementTable:
 
 
 class ActivityRow:
-    ROW = ['Li', 'K', 'Ba', 'Ca', 'Na', 'Mg', 'Al',
-        'C', 'Zn', 'Fe', 'Ni', 'Sn', 'Pb', 'H', 'Cu', 'Hg',
+    ROW = ['Li', 'K', 'Ba', 'Ca', 'Na', 'La', 'Mg', 'Al', 'Mn',
+        'Zn', 'Cr', 'Fe', 'Cd', 'Co', 'Ni', 'Sn', 'Pb', 'H', 'Cu', 'Hg',
         'Ag', 'Au', 'Pt']
     
     def compare_activity(self, u1, u2):
-        a1 = ActivityRow.ROW.index(u1.label)
-        a2 = ActivityRow.ROW.index(u2.label)
-        if a1 > a2:
+        a1, a2 = [ActivityRow.ROW.index(
+            u if type(u1) == str else u.label
+            for u in (u1, u2)
+        )]
+        if a1 < a2:
             return 0
-        elif a1 < a2:
+        elif a1 > a2:
             return 1
         return -1
 

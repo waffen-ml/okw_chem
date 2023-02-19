@@ -20,7 +20,7 @@ def encode_unit(unit, labels):
     elements = unit.get_all_elements()
     arr = np.zeros((len(labels),))
     for el in elements:
-        arr[labels.index(el.label)] = el.coef
+        arr[labels.index(el.label)] += el.coef
     return arr
 
 
@@ -39,26 +39,34 @@ def make_charge_vector(left, right, diff):
         for el in ellist:
             if el.label not in diff:
                 continue
-            charge_vector[i] += cc * el.get_full_charge()
+            charge_vector[i] += cc * el.full_charge()
     return charge_vector
 
 
 def get_coef(x, y):
     model = LinearRegression(fit_intercept=False).fit(x, y)
     score = model.score(x, y)
-    #print(score)
+    if 1 - score > 5e-2:
+        raise Exception('Problem with balance.')
     return model.coef_
 
 
+def rec_f(x, eps=1e-3):
+    phi = x - int(x)
+    if phi < eps:
+        return 1
+    beta = 1 / phi
+    n = rec_f(beta, eps)
+    return n * beta
+
+
 def make_integer_coef(coef):
-    a = []
+    s = set()
     for c in coef:
-        gamma = np.abs(c - np.floor(c))
-        if gamma > 1e-3:
-            a.append(round(1 / gamma))
-    p = list(set(a))
-    k = lcm(*p)
-    return np.round(coef * k).astype('int32').tolist()
+        mul = rec_f(c)
+        s.add(round(mul))
+    k = lcm(*list(s))
+    return np.round(coef * k).astype('int32')
 
 
 def apply_coef(units, coef):
@@ -86,7 +94,7 @@ def make_balance(left, right, only_coef=False):
     ], axis=0)
     y_train = np.zeros((len(x_train),))
     y_train[-1] = 1
-
+    
     coef = get_coef(x_train, y_train)
     coef = make_integer_coef(coef)
 
@@ -95,3 +103,4 @@ def make_balance(left, right, only_coef=False):
 
     return [apply_coef(left, coef[:len(left)]),
         apply_coef(right, coef[len(left):])]
+

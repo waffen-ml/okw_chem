@@ -18,13 +18,10 @@ class Oxide(Compound):
 
 
 class Hydroxide(Compound):
-    RESIDUE = Compound(O(-2), H(1))
-
     def config(self, base):
-        residue = Hydroxide.RESIDUE * base.charge
         self.type = get_base_ctype(base)
-        self.is_soluble = solubility.check(base, residue)
-        return [base, residue]
+        self.is_soluble = solubility.check(base, OH)
+        return bin_balance(base, OH)
     
     def _dissolve_cond(self):
         return self.is_soluble
@@ -35,7 +32,7 @@ class Acid(Compound):
         residue = Compound(*args)
         if residue.charge >= 0:
             raise Exception()
-        return self.complect(H(1), residue)
+        return bin_balance(H(1), residue)
 
     def _post_init(self):
         self.strength = acidinfo.get_strength(self)
@@ -57,7 +54,7 @@ class Simple(Compound):
         element = element(charge=0, coef=index)
         return [element]
 
-    def simplify_(self):
+    def _optim_coef(self):
         pass
 
     @property
