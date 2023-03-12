@@ -78,14 +78,23 @@ def make_balance(left, right, only_coef=False):
     labels = list(d.keys())
     diff = [k for k in d if len(d[k]) > 1]
 
+    # Составление матрицы количества элементов
+
     left_enc = encode_group(left, labels)
     right_enc = encode_group(right, labels)
     count_matrix = np.array(left_enc + right_enc)
     count_matrix[len(left_enc):, :] *= -1
 
+    # Составление вектора заряда элементов
+
     charge_vector = make_charge_vector(left, right, diff)
+
+    # Вспомогательный вектор
+
     lock_vector = np.zeros_like(charge_vector)
     lock_vector[0] = 1
+
+    # Соединение всего в один обучающий датасет
 
     x_train = np.concatenate([
         count_matrix.T,
@@ -94,6 +103,10 @@ def make_balance(left, right, only_coef=False):
     ], axis=0)
     y_train = np.zeros((len(x_train),))
     y_train[-1] = 1
+
+    # Тренировка линейной регрессии
+    # Получение коээфициентов и домножение
+    # чтобы сделать их целыми числами
     
     coef = get_coef(x_train, y_train)
     coef = make_integer_coef(coef)

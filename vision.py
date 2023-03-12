@@ -210,22 +210,32 @@ class Vision:
         return None
 
     def parse(self, expr):
+        expr = expr.strip()
         coef, main = extract_major_coef(expr)
+
+        i = main.find('{')
+        if i > 0:
+            descr = main[i + 1:-1]
+            main = main[:i]
+        else:
+            descr = ''
+
+        fc = lambda x: x.add_descr(descr)
 
         u = self.parse_excep(main)
         if u is not None:
-            return coef * u
-
+            return coef * fc(u)
+    
         for un in self.units:
             try:
                 cb = un(main)
                 assert cb is not None
             except:
                 continue
-            return coef * cb
+            return coef * fc(cb)
 
         return None
-        
+
 
 class parseunit:
     def __init__(self, expr):
@@ -276,7 +286,7 @@ db = Database({
     'r': [Br(-1), CO3, Cl(-1), F(-1),
         I(-1), NO3, NO2, PO4, S(-2), SO3,
         SO4, SiO3, Cr2O7, MnO4, ClO3],
-    'a': [el for el in all_elements]
+    'a': all_elements
 })
 
 db['b'] = db['a'] + [NH4]

@@ -1,6 +1,6 @@
 import telebot
 from vision import parse
-from reac import *
+from reacs import *
 from balance import make_balance
 from random import choice
 
@@ -34,6 +34,7 @@ def parse_sum(text):
 
 
 def send(msg, id):
+    print('SENDING', msg, 'TO', id)
     bot.send_message(id, msg)
 
 
@@ -84,6 +85,8 @@ def new_message(msg):
     except Exception as ex:
         send_phrase('error', user_id)
         raise ex
+
+
 
 
 

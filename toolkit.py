@@ -12,6 +12,13 @@ def apply_to_copy(obj, method, *args, **kwargs):
     return c
 
 
+def strweight(s):
+    for ch in s:
+        if ch not in [' ', '\n']:
+            return True
+    return False
+
+
 def gcd(*args):
     if len(args) == 1:
         return args[0]

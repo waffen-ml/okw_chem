@@ -27,8 +27,13 @@ def combine(x, y):
     return Compound(*units)
 
 
+def is_chemunit(obj):
+    return issubclass(type(obj), ChemUnit)
+
+
 class ChemUnit:
     label = 'X'
+    descr = ''
     charge = 0
     coef = 1
 
@@ -57,15 +62,17 @@ class ChemUnit:
     def set_label(self, lbl):
         self.label = lbl
 
-    def to_str(self, full=False, free=True):
+    def to_str(self, charge=False, descr=False, free=True):
         coef_part = optimized_int(self.coef)
         main_part = self._wrap(free)
         if free:
             label = coef_part + main_part
         else:
             label = main_part + coef_part
-        if full:
+        if charge:
             label += make_charge_lbl(self.charge)
+        if descr and self.descr:
+            label += '{' + self.descr + '}'
         return label
 
     def _wrap(self, is_free):
@@ -76,16 +83,22 @@ class ChemUnit:
             and self.coef > 1 else self.label
     
     def __repr__(self):
-        return self.to_str(full=True)
+        return self.to_str(charge=True, descr=True)
     
     def __str__(self):
-        return self.to_str(full=False)
+        return self.to_str(descr=True)
 
     def mul_coef_(self, k):
         self.set_coef(self.coef * k)
 
     def incr_coef_(self, k):
         self.set_coef(self.coef + k)
+
+    def add_descr_(self, descr):
+        self.descr = descr
+
+    def add_descr(self, descr):
+        return apply_to_copy(self, ChemUnit.add_descr_, descr)
 
     def mul(self, k):
         return apply_to_copy(self, ChemUnit.mul_coef_, k)
@@ -265,7 +278,7 @@ class Ion(ChemUnit):
         self.charge = self.obj.charge
 
     def __str__(self):
-        return self.to_str(True)
+        return self.to_str(charge=True)
 
 
 class Complex(Compound):

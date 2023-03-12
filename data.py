@@ -29,9 +29,9 @@ class ActivityRow:
     
     def compare_activity(self, u1, u2):
         a1, a2 = [ActivityRow.ROW.index(
-            u if type(u1) == str else u.label
+            u if type(u1) == str else u.label)
             for u in (u1, u2)
-        )]
+        ]
         if a1 < a2:
             return 0
         elif a1 > a2:
@@ -46,7 +46,11 @@ class Solubility:
     
     def check(self, metal, addition):
         metal_label = metal(coef=1).to_str(True)
-        addit_label = addition(coef=1).to_str(True) 
+        addit_label = addition(coef=1).to_str(True)
+
+        if metal_label not in self.table.columns:
+            return False
+        
         column = self.table[metal_label]
 
         if addit_label not in column:
@@ -79,7 +83,7 @@ class CompActivity:
             else:
                 return CompActivity.TYPES.ACIDIC
         else:
-            if unit(coef=1).to_str(full=True) in CompActivity.NSF_BASES:
+            if unit(coef=1).to_str(charge=True) in CompActivity.NSF_BASES:
                 return CompActivity.TYPES.NSF
             else:
                 return CompActivity.TYPES.ACIDIC
